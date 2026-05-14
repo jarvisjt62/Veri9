@@ -1,0 +1,47 @@
+{
+  "name": "Veri9 — Product Verification",
+  "short_name": "Veri9",
+  "description": "Verify any product, anywhere in the world. Scan barcodes to check authenticity instantly.",
+  "start_url": "/scanner.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#4F46E5",
+  "dir": "ltr",
+  "lang": "en",
+  "categories": ["shopping", "lifestyle", "utilities"],
+  "icons": [
+    {
+      "src": "favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Scan Product",
+      "short_name": "Scan",
+      "url": "/scanner.html",
+      "icons": [{ "src": "favicon-32.png", "sizes": "32x32" }]
+    }
+  ]
+}

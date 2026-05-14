@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <!-- No background - transparent -->
+  <!-- Outer shield -->
+  <path d="M50 5 L88 20 L88 50 C88 72 70 88 50 96 C30 88 12 72 12 50 L12 20 Z" 
+        fill="none" stroke="#3D4FCC" stroke-width="6" stroke-linejoin="round"/>
+  <!-- Inner shield -->
+  <path d="M50 15 L78 28 L78 50 C78 66 64 79 50 86 C36 79 22 66 22 50 L22 28 Z" 
+        fill="none" stroke="#3D4FCC" stroke-width="5" stroke-linejoin="round"/>
+  <!-- 9 shape: circle -->
+  <circle cx="50" cy="46" r="14" fill="none" stroke="#3D4FCC" stroke-width="5.5"/>
+  <!-- 9 tail -->
+  <line x1="64" y1="46" x2="64" y2="72" stroke="#3D4FCC" stroke-width="5.5" stroke-linecap="round"/>
+  <!-- Checkmark inside circle -->
+  <polyline points="42,46 48,54 60,38" fill="none" stroke="#3D4FCC" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

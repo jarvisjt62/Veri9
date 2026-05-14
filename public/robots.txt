@@ -1,0 +1,13 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /login
+Disallow: /signup
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /api/
+
+# Sitemap
+Sitemap: https://veri9.com/sitemap.xml
