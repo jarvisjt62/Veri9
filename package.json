@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prebuild": "node scripts/generate-version.js",
+    "predev": "node scripts/generate-version.js",
+    "version:gen": "node scripts/generate-version.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

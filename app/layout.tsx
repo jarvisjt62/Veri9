@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { Toaster } from "react-hot-toast";
 import { organizationJsonLd, websiteJsonLd } from "@/lib/jsonld";
+import UpdateChecker from "@/components/UpdateChecker";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -125,6 +126,7 @@ export default function RootLayout({
         />
         <AuthProvider>
           {children}
+          <UpdateChecker />
           <Toaster
             position="bottom-center"
             toastOptions={{
