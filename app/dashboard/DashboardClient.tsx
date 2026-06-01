@@ -367,40 +367,63 @@ function ProductResultCard({ result, onScanAgain, onReVerify }: { result: ScanRe
     verdict = 'UNVERIFIED'
   }
 
+  // Friendly per-engine-status label (mirrors lib/utils/formatStatus.ts)
+  // We surface the *exact* engine verdict here (Authentic vs. Likely Authentic),
+  // so users can see the difference between multi-confirmed and single-confirmed.
+  const friendlyLabelMap: Record<string, string> = {
+    VERIFIED: 'Authentic',
+    LIKELY_AUTHENTIC: 'Likely Authentic',
+    authentic: 'Likely Authentic',
+    INSUFFICIENT_DATA: 'Limited Information',
+    NOT_FOUND: 'Not Found',
+    not_found: 'Not Found',
+    SUSPICIOUS: 'Suspicious',
+    suspicious: 'Suspicious',
+    COUNTERFEIT: 'Counterfeit',
+    counterfeit: 'Counterfeit',
+    RECALLED: 'Recalled',
+    recalled: 'Recalled',
+    UNREADABLE: 'Rescan Needed',
+    unreadable: 'Rescan Needed',
+  }
+  const friendlyLabel = friendlyLabelMap[result.status] || 'Unknown'
+
   const scMap: Record<string, { bg: string; border: string; badgeBg: string; badgeText: string; icon: string; label: string; headline: string; tagline: string }> = {
     AUTHENTIC: {
       bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#15803d',
-      icon: '✅', label: 'AUTHENTIC',
-      headline: 'This product appears authentic',
+      icon: '✅', label: friendlyLabel, // "Authentic" or "Likely Authentic"
+      headline: result.status === 'VERIFIED'
+        ? 'This product is authentic'
+        : 'This product appears authentic',
       tagline: 'Cross-referenced across multiple trusted sources — safe to purchase.',
     },
     SUSPICIOUS: {
       bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#b45309',
-      icon: '⚠️', label: 'SUSPICIOUS',
+      icon: '⚠️', label: friendlyLabel, // "Suspicious" or "Limited Information"
       headline: 'Unable to fully verify this product',
       tagline: 'Some data was found but there are gaps or inconsistencies. Inspect packaging carefully before purchase.',
     },
     FAKE: {
       bg: '#fff1f2', border: '#fda4af', badgeBg: '#ffe4e6', badgeText: '#9f1239',
-      icon: '🚫', label: 'FAKE / COUNTERFEIT',
+      icon: '🚫', label: 'Counterfeit',
       headline: 'Counterfeit indicators detected',
       tagline: 'Our system identified specific red flags for this product. Do NOT purchase or consume this item.',
     },
     UNVERIFIED: {
       bg: '#f8fafc', border: '#cbd5e1', badgeBg: '#f1f5f9', badgeText: '#475569',
-      icon: 'ℹ️', label: 'NOT FOUND',
+      icon: 'ℹ️', label: 'Not Found',
       headline: 'Product not found in our system',
       tagline: 'This does NOT mean the product is fake — it just means no public record has been found yet. Private-label, regional, or brand-new products often show this status.',
     },
     RECALLED: {
       bg: '#fff7ed', border: '#fdba74', badgeBg: '#ffedd5', badgeText: '#c2410c',
-      icon: '⚠️', label: 'ACTIVE RECALL',
+      icon: '⚠️', label: 'Recalled',
       headline: 'This product is under an active recall',
       tagline: 'The product is real, but it has been recalled by the FDA or CPSC due to a safety issue. Stop using it immediately and check the official recall notice for return/refund instructions.',
     },
     UNREADABLE: {
       bg: '#eff6ff', border: '#93c5fd', badgeBg: '#dbeafe', badgeText: '#1d4ed8',
-      icon: '📷', label: 'UNREADABLE BARCODE',
+      icon: '📷', label: 'Rescan Needed',
       headline: 'We couldn\u2019t read that barcode cleanly',
       tagline: 'The scanned code failed its built-in checksum — it was likely misread by the camera. Please rescan with brighter light and the barcode fully in frame. This is NOT a counterfeit verdict.',
     },
@@ -687,7 +710,7 @@ function ProductResultCard({ result, onScanAgain, onReVerify }: { result: ScanRe
           Scan Another
         </button>
         <button onClick={() => {
-          const text = `Veri9: ${result.productName} (${result.barcode}) — Trust: ${result.trustScore}/100 — ${result.status.toUpperCase()}`
+          const text = `Veri9: ${result.productName} (${result.barcode}) — Trust: ${result.trustScore}/100 — ${friendlyLabel}`
           navigator.clipboard.writeText(text).then(() => toast.success('Copied!')).catch(() => toast.error('Copy failed'))
         }} style={{ flex: '1 1 90px', padding: '12px 14px', borderRadius: 11, background: '#f1f5f9', color: '#374151', fontWeight: 600, fontSize: '0.85rem', border: '1px solid #e2e8f0', cursor: 'pointer' }}>
           📋 Copy
@@ -2415,22 +2438,23 @@ function DashboardPageInner() {
   const avgScore = totalScans > 0 ? Math.round(scanHistory.reduce((sum, s) => sum + (s.trustScore || 0), 0) / totalScans) : 0
 
   const statusBadge = (status: string) => {
-    // Simplified 5-tier verdict badge
+    // Distinguishes "Authentic" (VERIFIED, multi-confirmed) from "Likely Authentic"
+    // (LIKELY_AUTHENTIC, single trusted source). All labels are human-friendly.
     const map: Record<string, { label: string; color: string; bg: string }> = {
-      authentic:          { label: '✅ Authentic',       color: '#15803d', bg: '#dcfce7' },
-      VERIFIED:           { label: '✅ Authentic',       color: '#15803d', bg: '#dcfce7' },
-      LIKELY_AUTHENTIC:   { label: '✅ Authentic',       color: '#15803d', bg: '#dcfce7' },
-      suspicious:         { label: '⚠️ Suspicious',      color: '#b45309', bg: '#fef3c7' },
-      SUSPICIOUS:         { label: '⚠️ Suspicious',      color: '#b45309', bg: '#fef3c7' },
-      INSUFFICIENT_DATA:  { label: '⚠️ Suspicious',      color: '#b45309', bg: '#fef3c7' },
-      not_found:          { label: 'ℹ️ Not in DB',       color: '#475569', bg: '#f1f5f9' },
-      NOT_FOUND:          { label: 'ℹ️ Not in DB',       color: '#475569', bg: '#f1f5f9' },
-      counterfeit:        { label: '🚫 Fake',            color: '#9f1239', bg: '#ffe4e6' },
-      COUNTERFEIT:        { label: '🚫 Fake',            color: '#9f1239', bg: '#ffe4e6' },
-      RECALLED:           { label: '⚠️ Recalled',        color: '#c2410c', bg: '#ffedd5' },
-      recalled:           { label: '⚠️ Recalled',        color: '#c2410c', bg: '#ffedd5' },
-      UNREADABLE:         { label: '📷 Rescan needed',   color: '#1d4ed8', bg: '#dbeafe' },
-      unreadable:         { label: '📷 Rescan needed',   color: '#1d4ed8', bg: '#dbeafe' },
+      authentic:          { label: '✅ Likely Authentic',  color: '#15803d', bg: '#dcfce7' },
+      VERIFIED:           { label: '✅ Authentic',         color: '#15803d', bg: '#dcfce7' },
+      LIKELY_AUTHENTIC:   { label: '✅ Likely Authentic',  color: '#15803d', bg: '#dcfce7' },
+      suspicious:         { label: '⚠️ Suspicious',         color: '#b45309', bg: '#fef3c7' },
+      SUSPICIOUS:         { label: '⚠️ Suspicious',         color: '#b45309', bg: '#fef3c7' },
+      INSUFFICIENT_DATA:  { label: '⚠️ Limited Information', color: '#b45309', bg: '#fef3c7' },
+      not_found:          { label: 'ℹ️ Not Found',          color: '#475569', bg: '#f1f5f9' },
+      NOT_FOUND:          { label: 'ℹ️ Not Found',          color: '#475569', bg: '#f1f5f9' },
+      counterfeit:        { label: '🚫 Counterfeit',        color: '#9f1239', bg: '#ffe4e6' },
+      COUNTERFEIT:        { label: '🚫 Counterfeit',        color: '#9f1239', bg: '#ffe4e6' },
+      RECALLED:           { label: '⚠️ Recalled',           color: '#c2410c', bg: '#ffedd5' },
+      recalled:           { label: '⚠️ Recalled',           color: '#c2410c', bg: '#ffedd5' },
+      UNREADABLE:         { label: '📷 Rescan Needed',      color: '#1d4ed8', bg: '#dbeafe' },
+      unreadable:         { label: '📷 Rescan Needed',      color: '#1d4ed8', bg: '#dbeafe' },
     }
     return map[status] || { label: status, color: '#64748b', bg: '#f8fafc' }
   }

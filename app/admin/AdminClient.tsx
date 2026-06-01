@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { formatStatus } from '@/lib/utils/formatStatus'
 import { useAuth } from '@/lib/auth-context'
 import toast from 'react-hot-toast'
 import { saveScanToHistory } from '@/lib/utils'
@@ -492,16 +493,16 @@ function VerifyingScreen({ barcode }: { barcode: string }) {
 function ProductResultCard({ result, onScanAgain }: { result: ScanResult; onScanAgain: () => void }) {
   const [showIngredients, setShowIngredients] = useState(false)
   const scMap: Record<string, { bg: string; border: string; badgeBg: string; badgeText: string; icon: string; label: string }> = {
-    authentic:         { bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#15803d', icon: '✓', label: 'AUTHENTIC' },
-    VERIFIED:          { bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#15803d', icon: '✓', label: 'VERIFIED' },
-    LIKELY_AUTHENTIC:  { bg: '#f0f9ff', border: '#7dd3fc', badgeBg: '#e0f2fe', badgeText: '#0369a1', icon: '✓', label: 'LIKELY AUTHENTIC' },
-    suspicious:        { bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#b45309', icon: '⚠', label: 'SUSPICIOUS' },
-    SUSPICIOUS:        { bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#b45309', icon: '⚠', label: 'SUSPICIOUS' },
-    INSUFFICIENT_DATA: { bg: '#f5f3ff', border: '#c4b5fd', badgeBg: '#ede9fe', badgeText: '#6d28d9', icon: '?', label: 'INSUFFICIENT DATA' },
-    not_found:         { bg: '#fef2f2', border: '#fecaca', badgeBg: '#fee2e2', badgeText: '#b91c1c', icon: '✗', label: 'NOT FOUND' },
-    NOT_FOUND:         { bg: '#fef2f2', border: '#fecaca', badgeBg: '#fee2e2', badgeText: '#b91c1c', icon: '✗', label: 'NOT FOUND' },
-    counterfeit:       { bg: '#fff1f2', border: '#fda4af', badgeBg: '#ffe4e6', badgeText: '#9f1239', icon: '🚫', label: 'COUNTERFEIT / FAKE' },
-    COUNTERFEIT:       { bg: '#fff1f2', border: '#fda4af', badgeBg: '#ffe4e6', badgeText: '#9f1239', icon: '🚫', label: 'COUNTERFEIT / FAKE' },
+    authentic:         { bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#15803d', icon: '✓', label: 'Likely Authentic' },
+    VERIFIED:          { bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#15803d', icon: '✓', label: 'Authentic' },
+    LIKELY_AUTHENTIC:  { bg: '#f0f9ff', border: '#7dd3fc', badgeBg: '#e0f2fe', badgeText: '#0369a1', icon: '✓', label: 'Likely Authentic' },
+    suspicious:        { bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#b45309', icon: '⚠', label: 'Suspicious' },
+    SUSPICIOUS:        { bg: '#fffbeb', border: '#fde68a', badgeBg: '#fef3c7', badgeText: '#b45309', icon: '⚠', label: 'Suspicious' },
+    INSUFFICIENT_DATA: { bg: '#f5f3ff', border: '#c4b5fd', badgeBg: '#ede9fe', badgeText: '#6d28d9', icon: '?', label: 'Limited Information' },
+    not_found:         { bg: '#fef2f2', border: '#fecaca', badgeBg: '#fee2e2', badgeText: '#b91c1c', icon: '✗', label: 'Not Found' },
+    NOT_FOUND:         { bg: '#fef2f2', border: '#fecaca', badgeBg: '#fee2e2', badgeText: '#b91c1c', icon: '✗', label: 'Not Found' },
+    counterfeit:       { bg: '#fff1f2', border: '#fda4af', badgeBg: '#ffe4e6', badgeText: '#9f1239', icon: '🚫', label: 'Counterfeit' },
+    COUNTERFEIT:       { bg: '#fff1f2', border: '#fda4af', badgeBg: '#ffe4e6', badgeText: '#9f1239', icon: '🚫', label: 'Counterfeit' },
   }
   const sc = scMap[result.status] || { bg: '#f8fafc', border: '#e2e8f0', badgeBg: '#f1f5f9', badgeText: '#475569', icon: '?', label: result.status }
 
@@ -2969,10 +2970,10 @@ function AdminPageInner() {
                           <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
                             <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</div>
                             {scanModal.mode === 'view' ? (
-                              <span style={{ padding: '3px 10px', borderRadius: 8, fontSize: '0.78rem', fontWeight: 700, ...statusColor(scanModal.scan.status) }}>{scanModal.scan.status}</span>
+                              <span style={{ padding: '3px 10px', borderRadius: 8, fontSize: '0.78rem', fontWeight: 700, ...statusColor(scanModal.scan.status) }}>{formatStatus(scanModal.scan.status)}</span>
                             ) : (
                               <select value={editScanStatus} onChange={e => setEditScanStatus(e.target.value)} style={{ width: '100%', padding: '6px 10px', borderRadius: 8, border: '1.5px solid #e5e7eb', fontSize: '0.83rem', fontWeight: 600, outline: 'none' }}>
-                                {['authentic','VERIFIED','LIKELY_AUTHENTIC','INSUFFICIENT_DATA','SUSPICIOUS','COUNTERFEIT','NOT_FOUND'].map(s => <option key={s} value={s}>{s}</option>)}
+                                {['authentic','VERIFIED','LIKELY_AUTHENTIC','INSUFFICIENT_DATA','SUSPICIOUS','COUNTERFEIT','NOT_FOUND'].map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
                               </select>
                             )}
                           </div>
@@ -3465,7 +3466,7 @@ function AdminPageInner() {
                 time: new Date(s.created_at),
                 timeStr: new Date(s.created_at).toLocaleString(),
                 userEmail: userEmailMap[s.user_id] || s.user_id.slice(0, 10) + '…',
-                action: `Product scanned — ${s.status.toUpperCase()}`,
+                action: `Product scanned — ${formatStatus(s.status)}`,
                 detail: `${s.product_name} · Barcode: ${s.barcode} · Score: ${s.trust_score ?? '—'}`,
                 type: 'scan' as const,
                 icon: (['VERIFIED','authentic'].includes(s.status)) ? '✅' : (['COUNTERFEIT','counterfeit'].includes(s.status)) ? '🚫' : '⚠️',
@@ -3560,7 +3561,7 @@ function AdminPageInner() {
                         {[
                           ['Product', logScanModal.scan.product_name],
                           ['Barcode', logScanModal.scan.barcode],
-                          ['Status', logScanModal.scan.status.toUpperCase()],
+                          ['Status', formatStatus(logScanModal.scan.status)],
                           ['Trust Score', String(logScanModal.scan.trust_score ?? '—')],
                           ['User', userEmailMap[logScanModal.scan.user_id] || logScanModal.scan.user_id],
                           ['Scanned At', new Date(logScanModal.scan.created_at).toLocaleString()],
