@@ -4,6 +4,84 @@ import React, { useEffect, useState, useRef, useCallback, Suspense } from 'react
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { formatStatus } from '@/lib/utils/formatStatus'
+// Single source of truth for ALL verification databases (38 sources).
+// Auto-syncs admin UI with the engine — no more drift.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const sourceRegistryModule = require('@/lib/verification/sourceRegistry')
+interface RegistrySource { id: string; name: string; description: string; type: string; region: string; defaultEnabled: boolean; requiresKey: boolean; icon?: string }
+const SOURCE_REGISTRY: RegistrySource[] = sourceRegistryModule.SOURCE_REGISTRY
+const REGION_LABELS: Record<string, { label: string; icon: string }> = sourceRegistryModule.REGIONS
+const TYPE_LABELS: Record<string, { label: string; icon: string }> = sourceRegistryModule.TYPES
+
+/** Build the default databases array from the registry (always in-sync). */
+function buildDefaultDatabases() {
+  return SOURCE_REGISTRY.map(s => ({
+    id: s.id,
+    name: s.name,
+    enabled: s.defaultEnabled,
+    description: s.description,
+    region: s.region,
+    type: s.type,
+    icon: s.icon,
+  }))
+}
+
+/**
+ * Reconcile a saved (possibly old) databases array against the current registry:
+ *  - Add any registry entries missing from saved data (new sources)
+ *  - Drop any saved entries no longer in the registry (removed sources)
+ *  - Preserve user toggle state for entries that still exist
+ */
+function reconcileDatabases(saved: SiteConfig['databases'] | undefined): SiteConfig['databases'] {
+  const savedMap = new Map<string, boolean>()
+  if (Array.isArray(saved)) {
+    for (const d of saved) {
+      const key = d.id || d.name
+      if (key) savedMap.set(key, d.enabled !== false)
+    }
+  }
+  // Legacy name → id alias map (mirrors lib/verification/engineConfig.ts)
+  const NAME_TO_ID: Record<string, string> = {
+    'Open Food Facts': 'openFoodFacts',
+    'OpenFDA Drug Database': 'openFDA',
+    'GS1 GEPIR / Country Prefix': 'gs1CompanyDb',
+    'UPCitemdb': 'upcItemDb',
+    'Open Beauty Facts': 'openBeautyFacts',
+    'USDA FoodData Central': 'usdaFoodData',
+    'NHTSA Vehicle Database': 'nhtsa',
+    'WHO Essential Medicines': 'whoMedicines',
+    'Open Library / ISBN': 'openLibrary',
+    'Datakick': 'datakick',
+    'Barcode Lookup': 'barcodeLookup',
+    'EAN Search': 'eanSearch',
+    'Regulatory Agencies': 'regulatoryAgencies',
+    'Go-UPC Global DB': 'goUpc',
+    'Open Prices DB': 'openPrices',
+    'Open Product Folksonomy': 'openProductData',
+    'NIH RxNav Drug DB': 'nihRxNav',
+    'CPSC Recalls (US)': 'cpscRecalls',
+  }
+  return SOURCE_REGISTRY.map(s => {
+    // First try id, then legacy name lookup, then registry name
+    let enabled = s.defaultEnabled
+    if (savedMap.has(s.id)) enabled = savedMap.get(s.id)!
+    else {
+      // Find any saved entry whose name maps to this id
+      for (const [k, v] of savedMap) {
+        if (NAME_TO_ID[k] === s.id || k === s.name) { enabled = v; break }
+      }
+    }
+    return {
+      id: s.id,
+      name: s.name,
+      enabled,
+      description: s.description,
+      region: s.region,
+      type: s.type,
+      icon: s.icon,
+    }
+  })
+}
 import { useAuth } from '@/lib/auth-context'
 import toast from 'react-hot-toast'
 import { saveScanToHistory } from '@/lib/utils'
@@ -73,8 +151,17 @@ interface SiteConfig {
   scannerTitle: string
   scannerSubtitle: string
   scannerEnabled: boolean
-  // Databases
-  databases: { name: string; enabled: boolean; description: string }[]
+  // Databases — populated from lib/verification/sourceRegistry.js (single source of truth).
+  // Round 29b: id is the stable key engine reads; region/type/icon used for UI grouping.
+  databases: {
+    id?: string
+    name: string
+    enabled: boolean
+    description: string
+    region?: string
+    type?: string
+    icon?: string
+  }[]
   // Platform
   maintenanceMode: boolean
   registrationEnabled: boolean
@@ -120,26 +207,7 @@ const DEFAULT_CONFIG: SiteConfig = {
   scannerTitle: 'Scan Any Barcode — Instantly',
   scannerSubtitle: 'Cross-referenced against 13+ global databases in real time.',
   scannerEnabled: true,
-  databases: [
-    { name: 'Open Food Facts', enabled: true, description: 'Food & beverage products worldwide' },
-    { name: 'OpenFDA Drug Database', enabled: true, description: 'FDA pharmaceutical products (US)' },
-    { name: 'GS1 GEPIR / Country Prefix', enabled: true, description: 'Global trade item numbers' },
-    { name: 'UPCitemdb', enabled: true, description: 'Universal product code database' },
-    { name: 'Open Beauty Facts', enabled: true, description: 'Cosmetics & personal care products' },
-    { name: 'USDA FoodData Central', enabled: true, description: 'US Dept. of Agriculture food data' },
-    { name: 'NHTSA Vehicle Database', enabled: true, description: 'Vehicle & automotive products' },
-    { name: 'WHO Essential Medicines', enabled: true, description: 'World Health Organization medicines' },
-    { name: 'Open Library / ISBN', enabled: true, description: 'Books & publications' },
-    { name: 'Datakick', enabled: true, description: 'Community product database' },
-    { name: 'Barcode Lookup', enabled: true, description: 'Multi-source product lookup' },
-    { name: 'EAN Search', enabled: true, description: 'European article number database' },
-    { name: 'Regulatory Agencies', enabled: true, description: 'Global regulatory body cross-reference' },
-    { name: 'Go-UPC Global DB', enabled: true, description: 'International product database (worldwide)' },
-    { name: 'Open Prices DB', enabled: true, description: 'Open Food Facts community price data' },
-    { name: 'Open Product Folksonomy', enabled: true, description: 'Community-contributed product attributes' },
-    { name: 'NIH RxNav Drug DB', enabled: true, description: 'US National Library of Medicine drug data' },
-    { name: 'CPSC Recalls (US)', enabled: true, description: 'US Consumer Product Safety Commission recalls' },
-  ],
+  databases: buildDefaultDatabases(),
   maintenanceMode: false,
   registrationEnabled: true,
   communityReportsEnabled: true,
@@ -162,7 +230,14 @@ function loadConfig(): SiteConfig {
   if (typeof window === 'undefined') return DEFAULT_CONFIG
   try {
     const saved = localStorage.getItem(CFG_KEY)
-    if (saved) return { ...DEFAULT_CONFIG, ...JSON.parse(saved) }
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      const merged = { ...DEFAULT_CONFIG, ...parsed }
+      // Round 29b: Always reconcile databases against the live registry so
+      // newly-added sources appear automatically (and removed ones disappear).
+      merged.databases = reconcileDatabases(merged.databases)
+      return merged
+    }
   } catch { /* ignore */ }
   return DEFAULT_CONFIG
 }
@@ -2665,22 +2740,59 @@ function AdminPageInner() {
                 </div>
               </div>
 
-              <Card title="Database Control Panel" subtitle="Toggle each verification source on or off">
-                {cfg.databases.map((db, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: i < cfg.databases.length - 1 ? '1px solid #f8fafc' : 'none' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 9, background: db.enabled ? '#f0f0ff' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                      {db.enabled ? '✅' : '⬜'}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: db.enabled ? '#0f172a' : '#94a3b8' }}>{db.name}</div>
-                      <div style={{ fontSize: '0.73rem', color: '#94a3b8' }}>{db.description}</div>
-                    </div>
-                    <Toggle on={db.enabled} onChange={v => {
-                      const updated = [...cfg.databases]; updated[i] = { ...updated[i], enabled: v }
-                      updateCfg({ databases: updated }); toast.success(`${db.name} ${v ? 'enabled' : 'disabled'}`, { position: 'bottom-center' })
-                    }} />
-                  </div>
-                ))}
+              <Card title={`Database Control Panel — ${cfg.databases.length} sources`} subtitle="Toggle each verification source on or off. Disabled sources are skipped during scans (no network call). Synced 1:1 with the engine.">
+                {/* Round 29b — group by region for readability */}
+                {(() => {
+                  const grouped: Record<string, typeof cfg.databases> = {}
+                  for (const db of cfg.databases) {
+                    const r = db.region || 'global'
+                    if (!grouped[r]) grouped[r] = []
+                    grouped[r].push(db)
+                  }
+                  const regionOrder = ['global','us','canada','europe','eu','africa','asia','oceania','americas']
+                  const orderedRegions = [
+                    ...regionOrder.filter(r => grouped[r]),
+                    ...Object.keys(grouped).filter(r => !regionOrder.includes(r)),
+                  ]
+                  return orderedRegions.map(region => {
+                    const meta = REGION_LABELS[region] || { label: region, icon: '🌐' }
+                    const items = grouped[region]
+                    return (
+                      <div key={region} style={{ marginBottom: 18 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0 8px', borderBottom: '2px solid #f1f5f9', marginBottom: 4 }}>
+                          <span style={{ fontSize: '1rem' }}>{meta.icon}</span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{meta.label}</span>
+                          <span style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 600 }}>· {items.length} {items.length === 1 ? 'source' : 'sources'}</span>
+                        </div>
+                        {items.map((db) => {
+                          const idx = cfg.databases.findIndex(d => (d.id || d.name) === (db.id || db.name))
+                          const typeMeta = db.type ? TYPE_LABELS[db.type] : null
+                          return (
+                            <div key={db.id || db.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 0', borderBottom: '1px solid #f8fafc' }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 9, background: db.enabled ? '#f0f0ff' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.05rem', flexShrink: 0 }}>
+                                {db.icon || (db.enabled ? '✅' : '⬜')}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.88rem', fontWeight: 700, color: db.enabled ? '#0f172a' : '#94a3b8' }}>{db.name}</span>
+                                  {typeMeta && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#635bff', background: '#eef2ff', padding: '1px 6px', borderRadius: 9999 }}>{typeMeta.label}</span>}
+                                </div>
+                                <div style={{ fontSize: '0.73rem', color: '#94a3b8', marginTop: 2 }}>{db.description}</div>
+                              </div>
+                              <Toggle on={db.enabled} onChange={v => {
+                                if (idx < 0) return
+                                const updated = [...cfg.databases]
+                                updated[idx] = { ...updated[idx], enabled: v }
+                                updateCfg({ databases: updated })
+                                toast.success(`${db.name} ${v ? 'enabled' : 'disabled'}`, { position: 'bottom-center' })
+                              }} />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })
+                })()}
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <button onClick={() => { updateCfg({ databases: cfg.databases.map(d => ({ ...d, enabled: true })) }); toast.success('All databases enabled', { position: 'bottom-center' }) }} style={{ padding: '8px 14px', borderRadius: 8, background: '#f0fdf4', color: '#10b981', fontWeight: 700, fontSize: '0.82rem', border: '1px solid #bbf7d0', cursor: 'pointer' }}>Enable All</button>
                   <button onClick={() => { updateCfg({ databases: cfg.databases.map(d => ({ ...d, enabled: false })) }); toast.success('All databases disabled', { position: 'bottom-center' }) }} style={{ padding: '8px 14px', borderRadius: 8, background: '#fef2f2', color: '#ef4444', fontWeight: 700, fontSize: '0.82rem', border: '1px solid #fecaca', cursor: 'pointer' }}>Disable All</button>

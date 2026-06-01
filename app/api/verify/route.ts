@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { loadEngineConfig } from '@/lib/verification/engineConfig'
 
 // Dynamic import to avoid ESM issues with require()
 async function getEngine() {
@@ -45,7 +46,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { verifyProduct } = await getEngine()
-    const result = await verifyProduct(cleanBarcode)
+    // Load admin toggle state (cached 30s) so disabled sources are skipped.
+    const cfg = await loadEngineConfig()
+    const result = await verifyProduct(cleanBarcode, cfg)
 
     return NextResponse.json({ success: true, data: result })
   } catch (error) {
@@ -72,7 +75,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const { verifyProduct } = await getEngine()
-    const result = await verifyProduct(cleanBarcode)
+    const cfg = await loadEngineConfig()
+    const result = await verifyProduct(cleanBarcode, cfg)
     return NextResponse.json({ success: true, data: result })
   } catch (error) {
     return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 })

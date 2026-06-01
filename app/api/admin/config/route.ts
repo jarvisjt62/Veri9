@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { clearEngineConfigCache } from '@/lib/verification/engineConfig'
 
 /**
  * Platform config API.
@@ -65,6 +66,10 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Round 29b — invalidate the in-memory engine config cache so the next
+    // /api/verify call picks up the new toggle state immediately (no 30s wait).
+    clearEngineConfigCache()
 
     return NextResponse.json({ success: true, config })
   } catch (e) {
