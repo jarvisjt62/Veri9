@@ -128,6 +128,18 @@ type ScannerView = 'scanner' | 'verifying' | 'result'
 // ─── Site Config (persisted in localStorage for demo) ────────────────────────
 const CFG_KEY = 'veri9_admin_config'
 
+// Human-friendly donation status metadata (label + colors + icon)
+const DONATION_STATUS_META: Record<string, { label: string; icon: string; bg: string; color: string }> = {
+  pending_gateway_config: { label: 'Pending gateway', icon: '⏳', bg: '#fef3c7', color: '#92400e' },
+  pending:                { label: 'Pending',          icon: '⏳', bg: '#fef3c7', color: '#92400e' },
+  completed:              { label: 'Completed',        icon: '✅', bg: '#d1fae5', color: '#065f46' },
+  received:               { label: 'Received',         icon: '✅', bg: '#d1fae5', color: '#065f46' },
+  failed:                 { label: 'Failed',           icon: '❌', bg: '#fee2e2', color: '#991b1b' },
+  refunded:               { label: 'Refunded',         icon: '↩️', bg: '#e0e7ff', color: '#3730a3' },
+}
+const donationStatusMeta = (status: string) =>
+  DONATION_STATUS_META[status] || { label: status, icon: '•', bg: '#f1f5f9', color: '#475569' }
+
 interface SiteConfig {
   // Homepage
   heroTitle: string
@@ -1860,6 +1872,168 @@ function AdminPageInner() {
     const iv = setInterval(load, 10000)
     return () => clearInterval(iv)
   }, [])
+
+  // ── Donation management: selection, edit, view, delete ──
+  const reloadDonations = async () => {
+    try {
+      const r = await fetch('/api/donations', { cache: 'no-store' })
+      if (r.ok) {
+        const d = await r.json()
+        const serverList: DonationIntent[] = (d.donations || []).map((x: {
+          id: string; amount: number; currency: string; usdEquivalent: string;
+          gateway: string; gatewayName?: string; name: string; email: string;
+          message?: string; status: string; createdAt: string;
+        }) => ({
+          id: x.id, amount: x.amount, currency: x.currency, usdEquivalent: x.usdEquivalent,
+          gateway: x.gateway, gatewayName: x.gatewayName, name: x.name, email: x.email,
+          message: x.message, status: x.status, createdAt: x.createdAt,
+        }))
+        serverList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        setDonationIntents(serverList)
+      }
+    } catch {}
+  }
+
+  const [selectedDonations, setSelectedDonations] = useState<Set<string>>(new Set())
+  const [donationBusy, setDonationBusy] = useState(false)
+  const [viewDonation, setViewDonation] = useState<DonationIntent | null>(null)
+  const [editDonation, setEditDonation] = useState<DonationIntent | null>(null)
+  const [editDonationForm, setEditDonationForm] = useState<Partial<DonationIntent>>({})
+
+  const adminHeaders = (): Record<string, string> => {
+    const h: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (user?.email) h['x-user-email'] = user.email
+    return h
+  }
+
+  const toggleDonationSelect = (id: string) => {
+    setSelectedDonations(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAllDonations = (ids: string[]) => {
+    setSelectedDonations(prev => {
+      const allSelected = ids.length > 0 && ids.every(id => prev.has(id))
+      return allSelected ? new Set() : new Set(ids)
+    })
+  }
+
+  const updateDonationStatusUI = async (id: string, status: string) => {
+    setDonationBusy(true)
+    try {
+      const r = await fetch('/api/donations', {
+        method: 'PATCH',
+        headers: adminHeaders(),
+        body: JSON.stringify({ id, status }),
+      })
+      if (r.ok) {
+        setDonationIntents(prev => prev.map(d => d.id === id ? { ...d, status } : d))
+        toast.success(`Donation marked as ${DONATION_STATUS_META[status]?.label || status}`)
+      } else {
+        const e = await r.json().catch(() => ({}))
+        toast.error(e.error || 'Failed to update status')
+      }
+    } catch { toast.error('Network error') }
+    setDonationBusy(false)
+  }
+
+  const saveDonationEdit = async () => {
+    if (!editDonation) return
+    setDonationBusy(true)
+    try {
+      const fields = {
+        amount: Number(editDonationForm.amount) || 0,
+        currency: editDonationForm.currency || editDonation.currency,
+        usdEquivalent: editDonationForm.usdEquivalent ?? editDonation.usdEquivalent,
+        gatewayName: editDonationForm.gatewayName ?? editDonation.gatewayName,
+        name: editDonationForm.name ?? editDonation.name,
+        email: editDonationForm.email ?? editDonation.email,
+        message: editDonationForm.message ?? editDonation.message,
+        status: editDonationForm.status ?? editDonation.status,
+      }
+      const r = await fetch('/api/donations', {
+        method: 'PATCH',
+        headers: adminHeaders(),
+        body: JSON.stringify({ id: editDonation.id, fields }),
+      })
+      if (r.ok) {
+        setDonationIntents(prev => prev.map(d => d.id === editDonation.id ? { ...d, ...fields } as DonationIntent : d))
+        toast.success('Donation updated')
+        setEditDonation(null)
+      } else {
+        const e = await r.json().catch(() => ({}))
+        toast.error(e.error || 'Failed to save changes')
+      }
+    } catch { toast.error('Network error') }
+    setDonationBusy(false)
+  }
+
+  const deleteOneDonation = async (id: string) => {
+    if (!confirm('Delete this donation record permanently? This cannot be undone.')) return
+    setDonationBusy(true)
+    try {
+      const r = await fetch(`/api/donations?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      })
+      if (r.ok) {
+        setDonationIntents(prev => prev.filter(d => d.id !== id))
+        setSelectedDonations(prev => { const n = new Set(prev); n.delete(id); return n })
+        toast.success('Donation deleted')
+      } else {
+        const e = await r.json().catch(() => ({}))
+        toast.error(e.error || 'Failed to delete')
+      }
+    } catch { toast.error('Network error') }
+    setDonationBusy(false)
+  }
+
+  const bulkDeleteDonationsUI = async () => {
+    const ids = Array.from(selectedDonations)
+    if (ids.length === 0) return
+    if (!confirm(`Delete ${ids.length} selected donation${ids.length > 1 ? 's' : ''} permanently? This cannot be undone.`)) return
+    setDonationBusy(true)
+    try {
+      const r = await fetch('/api/donations', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ action: 'bulk-delete', ids }),
+      })
+      if (r.ok) {
+        setDonationIntents(prev => prev.filter(d => !selectedDonations.has(d.id)))
+        setSelectedDonations(new Set())
+        toast.success(`Deleted ${ids.length} donation${ids.length > 1 ? 's' : ''}`)
+      } else {
+        const e = await r.json().catch(() => ({}))
+        toast.error(e.error || 'Failed to delete')
+      }
+    } catch { toast.error('Network error') }
+    setDonationBusy(false)
+  }
+
+  const bulkStatusDonationsUI = async (status: string) => {
+    const ids = Array.from(selectedDonations)
+    if (ids.length === 0) return
+    setDonationBusy(true)
+    try {
+      const r = await fetch('/api/donations', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: JSON.stringify({ action: 'bulk-status', status, ids }),
+      })
+      if (r.ok) {
+        setDonationIntents(prev => prev.map(d => selectedDonations.has(d.id) ? { ...d, status } : d))
+        setSelectedDonations(new Set())
+        toast.success(`Marked ${ids.length} as ${DONATION_STATUS_META[status]?.label || status}`)
+      } else {
+        const e = await r.json().catch(() => ({}))
+        toast.error(e.error || 'Failed to update')
+      }
+    } catch { toast.error('Network error') }
+    setDonationBusy(false)
+  }
 
   // ── Messaging / broadcast ──
   const [broadcastAudience, setBroadcastAudience] = useState('all')
@@ -5046,7 +5220,10 @@ function AdminPageInner() {
               </div>
 
               {(() => {
+                const isCompleted = (d: DonationIntent) => d.status === 'completed' || d.status === 'received'
                 const totalUsd = donationIntents.reduce((s, d) => s + parseFloat(d.usdEquivalent || '0'), 0)
+                const receivedUsd = donationIntents.filter(isCompleted).reduce((s, d) => s + parseFloat(d.usdEquivalent || '0'), 0)
+                const pendingCount = donationIntents.filter(d => !isCompleted(d) && d.status !== 'failed' && d.status !== 'refunded').length
                 const thisMonthUsd = donationIntents
                   .filter(d => new Date(d.createdAt).getMonth() === new Date().getMonth() && new Date(d.createdAt).getFullYear() === new Date().getFullYear())
                   .reduce((s, d) => s + parseFloat(d.usdEquivalent || '0'), 0)
@@ -5064,10 +5241,10 @@ function AdminPageInner() {
                   <>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
                       {[
-                        { label: 'Total Donations (USD eq.)', value: `$${totalUsd.toFixed(2)}`, sub: `${donationIntents.length} donation${donationIntents.length !== 1 ? 's' : ''} all-time`, color: '#059669' },
-                        { label: 'This Month',      value: `$${thisMonthUsd.toFixed(2)}`, sub: 'USD equivalent · ' + new Date().toLocaleString('en-US', { month: 'long' }), color: '#2563eb' },
-                        { label: 'Unique Donors',   value: String(uniqueDonors), sub: 'Distinct emails',            color: '#7c3aed' },
-                        { label: 'Free Users Served', value: realStats.totalUsers.toString(), sub: '100% free forever',       color: '#f59e0b' },
+                        { label: 'Received (Completed)', value: `$${receivedUsd.toFixed(2)}`, sub: `${donationIntents.filter(isCompleted).length} confirmed · ${pendingCount} pending`, color: '#059669' },
+                        { label: 'Total Recorded (USD eq.)', value: `$${totalUsd.toFixed(2)}`, sub: `${donationIntents.length} donation${donationIntents.length !== 1 ? 's' : ''} all-time`, color: '#2563eb' },
+                        { label: 'This Month',      value: `$${thisMonthUsd.toFixed(2)}`, sub: 'USD equivalent · ' + new Date().toLocaleString('en-US', { month: 'long' }), color: '#7c3aed' },
+                        { label: 'Unique Donors',   value: String(uniqueDonors), sub: 'Distinct emails',            color: '#f59e0b' },
                       ].map(s => (
                         <div key={s.label} style={{ background: adminCardBg, padding: 20, borderRadius: 12, border: `1px solid ${adminBorder}` }}>
                           <div style={{ fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase', marginBottom: 6 }}>{s.label}</div>
@@ -5135,27 +5312,76 @@ function AdminPageInner() {
               </div>
 
               <div style={{ background: adminCardBg, padding: 20, borderRadius: 12, border: `1px solid ${adminBorder}` }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 16, color: adminText }}>Recent Donations</h3>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: adminText, margin: 0 }}>Recent Donations</h3>
+                  <button
+                    onClick={reloadDonations}
+                    disabled={donationBusy}
+                    style={{ fontSize: '0.78rem', fontWeight: 600, color: '#635bff', background: 'none', border: `1px solid ${adminBorder}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}
+                  >↻ Refresh</button>
+                </div>
+
+                {/* Bulk action bar */}
+                {selectedDonations.size > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '10px 12px', marginBottom: 12, background: adminDark ? '#1e293b' : '#eef2ff', borderRadius: 10, border: `1px solid ${adminDark ? '#334155' : '#c7d2fe'}` }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: adminText }}>
+                      {selectedDonations.size} selected
+                    </span>
+                    <div style={{ flex: 1 }} />
+                    <button onClick={() => bulkStatusDonationsUI('completed')} disabled={donationBusy}
+                      style={{ fontSize: '0.76rem', fontWeight: 600, color: '#065f46', background: '#d1fae5', border: 'none', borderRadius: 7, padding: '6px 11px', cursor: 'pointer' }}>
+                      ✅ Mark Completed
+                    </button>
+                    <button onClick={() => bulkStatusDonationsUI('pending_gateway_config')} disabled={donationBusy}
+                      style={{ fontSize: '0.76rem', fontWeight: 600, color: '#92400e', background: '#fef3c7', border: 'none', borderRadius: 7, padding: '6px 11px', cursor: 'pointer' }}>
+                      ⏳ Mark Pending
+                    </button>
+                    <button onClick={bulkDeleteDonationsUI} disabled={donationBusy}
+                      style={{ fontSize: '0.76rem', fontWeight: 600, color: '#fff', background: '#dc2626', border: 'none', borderRadius: 7, padding: '6px 11px', cursor: 'pointer' }}>
+                      🗑 Delete Selected
+                    </button>
+                    <button onClick={() => setSelectedDonations(new Set())} disabled={donationBusy}
+                      style={{ fontSize: '0.76rem', fontWeight: 600, color: adminTextMuted, background: 'none', border: `1px solid ${adminBorder}`, borderRadius: 7, padding: '6px 11px', cursor: 'pointer' }}>
+                      Clear
+                    </button>
+                  </div>
+                )}
+
                 {donationIntents.length === 0 ? (
                   <p style={{ fontSize: '0.85rem', color: adminTextMuted, padding: 16, textAlign: 'center' }}>No donations yet. Integrate Stripe, PayPal, Paystack, Flutterwave, M-Pesa, Razorpay, Alipay or Coinbase Commerce to enable one-click giving on the <Link href="/donate" style={{ color: '#635bff' }}>/donate</Link> page.</p>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
+                    {(() => {
+                      const visible = donationIntents.slice(0, 50)
+                      const visibleIds = visible.map(d => d.id)
+                      const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedDonations.has(id))
+                      return (
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                       <thead>
                         <tr style={{ borderBottom: `1px solid ${adminBorder}` }}>
+                          <th style={{ textAlign: 'center', padding: '10px 8px', width: 34 }}>
+                            <input type="checkbox" checked={allSelected} onChange={() => toggleSelectAllDonations(visibleIds)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                          </th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Donor</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Amount</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Gateway</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Status</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>When</th>
+                          <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {[...donationIntents].reverse().slice(0, 25).map(d => (
-                          <tr key={d.id} style={{ borderBottom: `1px solid ${adminBorder}` }}>
+                        {visible.map(d => {
+                          const meta = donationStatusMeta(d.status)
+                          const isSel = selectedDonations.has(d.id)
+                          return (
+                          <tr key={d.id} style={{ borderBottom: `1px solid ${adminBorder}`, background: isSel ? (adminDark ? '#1e293b' : '#f5f3ff') : 'transparent' }}>
+                            <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                              <input type="checkbox" checked={isSel} onChange={() => toggleDonationSelect(d.id)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                            </td>
                             <td style={{ padding: '10px 8px', color: adminText }}>
-                              <div style={{ fontWeight: 700 }}>{d.name}</div>
-                              <div style={{ fontSize: '0.75rem', color: adminTextMuted }}>{d.email}</div>
+                              <div style={{ fontWeight: 700 }}>{d.name || '(anonymous)'}</div>
+                              <div style={{ fontSize: '0.75rem', color: adminTextMuted }}>{d.email || '—'}</div>
                             </td>
                             <td style={{ padding: '10px 8px', color: adminText, fontWeight: 700 }}>
                               {d.currency} {d.amount.toLocaleString()}
@@ -5163,18 +5389,143 @@ function AdminPageInner() {
                             </td>
                             <td style={{ padding: '10px 8px', color: adminText }}>{d.gatewayName || d.gateway}</td>
                             <td style={{ padding: '10px 8px' }}>
-                              <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700, background: '#fef3c7', color: '#92400e' }}>
-                                ⏳ {d.status === 'pending_gateway_config' ? 'Pending gateway' : d.status}
+                              <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700, background: meta.bg, color: meta.color, whiteSpace: 'nowrap' }}>
+                                {meta.icon} {meta.label}
                               </span>
                             </td>
-                            <td style={{ padding: '10px 8px', color: adminTextMuted, fontSize: '0.78rem' }}>{new Date(d.createdAt).toLocaleString()}</td>
+                            <td style={{ padding: '10px 8px', color: adminTextMuted, fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{new Date(d.createdAt).toLocaleString()}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'inline-flex', gap: 4 }}>
+                                {d.status !== 'completed' && d.status !== 'received' && (
+                                  <button title="Mark as completed / received" onClick={() => updateDonationStatusUI(d.id, 'completed')} disabled={donationBusy}
+                                    style={{ fontSize: '0.72rem', padding: '5px 8px', borderRadius: 6, border: 'none', background: '#d1fae5', color: '#065f46', fontWeight: 700, cursor: 'pointer' }}>✓</button>
+                                )}
+                                <button title="View details" onClick={() => setViewDonation(d)}
+                                  style={{ fontSize: '0.72rem', padding: '5px 8px', borderRadius: 6, border: `1px solid ${adminBorder}`, background: 'none', color: adminText, fontWeight: 600, cursor: 'pointer' }}>👁</button>
+                                <button title="Edit" onClick={() => { setEditDonation(d); setEditDonationForm({ ...d }) }}
+                                  style={{ fontSize: '0.72rem', padding: '5px 8px', borderRadius: 6, border: `1px solid ${adminBorder}`, background: 'none', color: '#635bff', fontWeight: 600, cursor: 'pointer' }}>✏️</button>
+                                <button title="Delete" onClick={() => deleteOneDonation(d.id)} disabled={donationBusy}
+                                  style={{ fontSize: '0.72rem', padding: '5px 8px', borderRadius: 6, border: 'none', background: '#fee2e2', color: '#991b1b', fontWeight: 700, cursor: 'pointer' }}>🗑</button>
+                              </div>
+                            </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
+                      )
+                    })()}
                   </div>
                 )}
               </div>
+
+              {/* View Donation Modal */}
+              {viewDonation && (
+                <div onClick={() => setViewDonation(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+                  <div onClick={e => e.stopPropagation()} style={{ background: adminCardBg, borderRadius: 14, padding: 24, maxWidth: 460, width: '100%', border: `1px solid ${adminBorder}`, maxHeight: '90vh', overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: adminText, margin: 0 }}>Donation Details</h3>
+                      <button onClick={() => setViewDonation(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: adminTextMuted, lineHeight: 1 }}>×</button>
+                    </div>
+                    {(() => {
+                      const meta = donationStatusMeta(viewDonation.status)
+                      const rows: [string, React.ReactNode][] = [
+                        ['Donor', viewDonation.name || '(anonymous)'],
+                        ['Email', viewDonation.email || '—'],
+                        ['Amount', `${viewDonation.currency} ${viewDonation.amount.toLocaleString()} (≈ $${viewDonation.usdEquivalent} USD)`],
+                        ['Gateway', viewDonation.gatewayName || viewDonation.gateway],
+                        ['Status', <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700, background: meta.bg, color: meta.color }}>{meta.icon} {meta.label}</span>],
+                        ['Message', viewDonation.message || '—'],
+                        ['Date', new Date(viewDonation.createdAt).toLocaleString()],
+                        ['Record ID', <code style={{ fontSize: '0.72rem', color: adminTextMuted }}>{viewDonation.id}</code>],
+                      ]
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          {rows.map(([label, val]) => (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, fontSize: '0.88rem' }}>
+                              <span style={{ color: adminTextMuted, fontWeight: 600, minWidth: 90 }}>{label}</span>
+                              <span style={{ color: adminText, textAlign: 'right', wordBreak: 'break-word' }}>{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 22 }}>
+                      <button onClick={() => { setEditDonation(viewDonation); setEditDonationForm({ ...viewDonation }); setViewDonation(null) }}
+                        style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: '#635bff', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
+                      <button onClick={() => setViewDonation(null)}
+                        style={{ flex: 1, padding: '10px', borderRadius: 8, border: `1px solid ${adminBorder}`, background: 'none', color: adminText, fontWeight: 600, cursor: 'pointer' }}>Close</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Edit Donation Modal */}
+              {editDonation && (
+                <div onClick={() => setEditDonation(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+                  <div onClick={e => e.stopPropagation()} style={{ background: adminCardBg, borderRadius: 14, padding: 24, maxWidth: 480, width: '100%', border: `1px solid ${adminBorder}`, maxHeight: '90vh', overflowY: 'auto' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: adminText, margin: 0 }}>Edit Donation</h3>
+                      <button onClick={() => setEditDonation(null)} style={{ background: 'none', border: 'none', fontSize: '1.4rem', cursor: 'pointer', color: adminTextMuted, lineHeight: 1 }}>×</button>
+                    </div>
+                    {(() => {
+                      const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', borderRadius: 8, border: `1px solid ${adminBorder}`, background: adminDark ? '#0f172a' : '#fff', color: adminText, fontSize: '0.88rem' }
+                      const labelStyle: React.CSSProperties = { fontSize: '0.74rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase', marginBottom: 5, display: 'block' }
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          <div>
+                            <label style={labelStyle}>Donor Name</label>
+                            <input style={inputStyle} value={editDonationForm.name || ''} onChange={e => setEditDonationForm(f => ({ ...f, name: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Email</label>
+                            <input style={inputStyle} value={editDonationForm.email || ''} onChange={e => setEditDonationForm(f => ({ ...f, email: e.target.value }))} />
+                          </div>
+                          <div style={{ display: 'flex', gap: 12 }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={labelStyle}>Amount</label>
+                              <input type="number" step="0.01" style={inputStyle} value={editDonationForm.amount ?? ''} onChange={e => setEditDonationForm(f => ({ ...f, amount: Number(e.target.value) }))} />
+                            </div>
+                            <div style={{ width: 110 }}>
+                              <label style={labelStyle}>Currency</label>
+                              <input style={inputStyle} value={editDonationForm.currency || ''} onChange={e => setEditDonationForm(f => ({ ...f, currency: e.target.value.toUpperCase() }))} />
+                            </div>
+                          </div>
+                          <div>
+                            <label style={labelStyle}>USD Equivalent</label>
+                            <input style={inputStyle} value={editDonationForm.usdEquivalent || ''} onChange={e => setEditDonationForm(f => ({ ...f, usdEquivalent: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Gateway</label>
+                            <input style={inputStyle} value={editDonationForm.gatewayName || ''} onChange={e => setEditDonationForm(f => ({ ...f, gatewayName: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Status</label>
+                            <select style={inputStyle} value={editDonationForm.status || ''} onChange={e => setEditDonationForm(f => ({ ...f, status: e.target.value }))}>
+                              <option value="pending_gateway_config">⏳ Pending gateway</option>
+                              <option value="completed">✅ Completed / Received</option>
+                              <option value="failed">❌ Failed</option>
+                              <option value="refunded">↩️ Refunded</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Message</label>
+                            <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} value={editDonationForm.message || ''} onChange={e => setEditDonationForm(f => ({ ...f, message: e.target.value }))} />
+                          </div>
+                        </div>
+                      )
+                    })()}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 22 }}>
+                      <button onClick={saveDonationEdit} disabled={donationBusy}
+                        style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', background: '#635bff', color: '#fff', fontWeight: 700, cursor: 'pointer', opacity: donationBusy ? 0.6 : 1 }}>
+                        {donationBusy ? 'Saving…' : 'Save Changes'}
+                      </button>
+                      <button onClick={() => setEditDonation(null)} disabled={donationBusy}
+                        style={{ flex: 1, padding: '11px', borderRadius: 8, border: `1px solid ${adminBorder}`, background: 'none', color: adminText, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

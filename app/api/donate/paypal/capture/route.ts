@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getGatewayCredentials } from '@/lib/gateway-credentials'
+import { markDonationCompletedByPayment } from '@/lib/integrations-store'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,8 +67,15 @@ export async function GET(req: NextRequest) {
     const captureAmt  = captureUnit?.payments?.captures?.[0]?.amount
     const amount   = captureAmt?.value || '0'
     const currency = captureAmt?.currency_code || 'USD'
+    const donorEmail = capture.payer?.email_address || ''
 
-    // 3. Send admin notification
+    // 3. Mark the matching donation record as completed so the admin dashboard
+    //    no longer shows it as "Pending gateway".
+    try {
+      await markDonationCompletedByPayment(orderId, { gateway: 'paypal', email: donorEmail })
+    } catch { /* non-fatal */ }
+
+    // 4. Send admin notification
     try {
       await fetch(`${appUrl}/api/notify`, {
         method: 'POST',
@@ -77,7 +85,7 @@ export async function GET(req: NextRequest) {
           gateway: 'PayPal',
           amount,
           currency,
-          donorEmail: capture.payer?.email_address || 'unknown',
+          donorEmail: donorEmail || 'unknown',
           donorName: `${capture.payer?.name?.given_name || ''} ${capture.payer?.name?.surname || ''}`.trim() || 'Anonymous',
           status: 'completed',
           orderId,

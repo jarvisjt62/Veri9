@@ -371,6 +371,69 @@ export async function updateDonationStatus(id: string, status: string, paymentId
   })
 }
 
+/**
+ * Full-field edit of a donation record. Only the keys present in `fields`
+ * are overwritten; everything else (createdAt, etc.) is preserved.
+ * Returns false if the record does not exist.
+ */
+export async function updateDonation(
+  id: string,
+  fields: Partial<Omit<DonationRecord, 'id' | 'createdAt'>>,
+): Promise<boolean> {
+  const current = await getIntegration(`donation:${id}`)
+  if (!current) return false
+  const merged: Record<string, string> = { ...current.credentials }
+  const setIf = (key: string, val: unknown) => {
+    if (val !== undefined && val !== null) merged[key] = String(val)
+  }
+  setIf('amount', fields.amount)
+  setIf('currency', fields.currency)
+  setIf('usdEquivalent', fields.usdEquivalent)
+  setIf('gateway', fields.gateway)
+  setIf('gatewayName', fields.gatewayName)
+  setIf('anonymous', fields.anonymous)
+  setIf('name', fields.name)
+  setIf('email', fields.email)
+  setIf('message', fields.message)
+  setIf('status', fields.status)
+  setIf('paymentId', fields.paymentId)
+  await upsertIntegration({ name: `donation:${id}`, connected: true, credentials: merged })
+  return true
+}
+
+/**
+ * Find a donation by its gateway paymentId/orderId and flip its status.
+ * Used by gateway capture/callback routes to mark a donation completed once
+ * the payment actually settles. Returns the matched donation id or null.
+ */
+export async function markDonationCompletedByPayment(
+  paymentId: string,
+  opts?: { gateway?: string; email?: string },
+): Promise<string | null> {
+  if (!paymentId) return null
+  try {
+    const all = await getAllDonations()
+    // 1) exact paymentId match
+    let match = all.find(d => d.paymentId && d.paymentId === paymentId)
+    // 2) fall back to most recent pending donation for this gateway/email
+    if (!match && (opts?.gateway || opts?.email)) {
+      const candidates = all
+        .filter(d =>
+          d.status === 'pending_gateway_config' &&
+          (opts?.gateway ? d.gateway === opts.gateway : true) &&
+          (opts?.email ? d.email === opts.email : true),
+        )
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      match = candidates[0]
+    }
+    if (!match) return null
+    await updateDonation(match.id, { status: 'completed', paymentId })
+    return match.id
+  } catch {
+    return null
+  }
+}
+
 export async function deleteDonation(id: string): Promise<void> {
   if (!SUPABASE_URL || !SERVICE_KEY) return
   try {
@@ -379,6 +442,34 @@ export async function deleteDonation(id: string): Promise<void> {
       headers: { Prefer: 'return=minimal' },
     })
   } catch {}
+}
+
+/**
+ * Delete multiple donations at once. Returns the count successfully removed.
+ */
+export async function bulkDeleteDonations(ids: string[]): Promise<number> {
+  if (!SUPABASE_URL || !SERVICE_KEY) return 0
+  const clean = ids.filter(Boolean)
+  if (clean.length === 0) return 0
+  let removed = 0
+  // PostgREST `in` filter: name=in.(donation:a,donation:b,...)
+  const inList = clean.map(id => `donation:${id}`).join(',')
+  try {
+    const r = await sbFetch(
+      `veri9_integrations?name=in.(${encodeURIComponent(inList)})`,
+      { method: 'DELETE', headers: { Prefer: 'return=minimal' } },
+    )
+    if (r.ok) removed = clean.length
+  } catch {
+    // fall back to per-row deletes
+    for (const id of clean) {
+      try {
+        await deleteDonation(id)
+        removed++
+      } catch {}
+    }
+  }
+  return removed
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

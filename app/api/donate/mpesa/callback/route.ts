@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { markDonationCompletedByPayment } from '@/lib/integrations-store'
 
 /**
  * POST /api/donate/mpesa/callback
@@ -19,7 +20,10 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://veri9.com'
 
     if (resultCode === 0) {
-      // Payment successful
+      // Payment successful — flip the donation record to completed
+      try {
+        await markDonationCompletedByPayment(String(mpesaRef || ''), { gateway: 'mpesa' })
+      } catch {}
       try {
         await fetch(`${appUrl}/api/notify`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },

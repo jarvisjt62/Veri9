@@ -5,6 +5,6 @@
  * /version.json (which is fetched fresh from the server) to detect when a
  * newer build has been deployed.
  */
-export const BUILD_VERSION = "9b958c1-mpvclz11"
-export const BUILD_COMMIT  = "9b958c1"
-export const BUILT_AT      = "2026-06-01T15:13:20.533Z"
+export const BUILD_VERSION = "32e8493-mpzc20z0"
+export const BUILD_COMMIT  = "32e8493"
+export const BUILT_AT      = "2026-06-04T10:08:54.636Z"
