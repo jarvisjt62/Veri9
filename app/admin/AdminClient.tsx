@@ -3335,7 +3335,7 @@ function AdminPageInner() {
                 )}
 
                 <div style={{ background: '#fff', borderRadius: 16, border: '1px solid #e5e7eb', overflow: 'hidden', boxShadow: '0 1px 6px rgba(0,0,0,0.04)' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '36px 2fr 1.2fr 1.6fr 90px 80px 120px', padding: '11px 18px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', fontSize: '0.71rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '36px 2fr 1.2fr 1.3fr 80px 130px 110px', padding: '11px 18px', background: '#f8fafc', borderBottom: '1px solid #f1f5f9', fontSize: '0.71rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', gap: 8, alignItems: 'center' }}>
                     <input
                       type="checkbox"
                       checked={pagedScans.length > 0 && pagedScans.every(s => scanSelected.has(s.id))}
@@ -3357,7 +3357,7 @@ function AdminPageInner() {
                     const userEmail = userEmailMap[s.user_id] || (s.user_id?.slice(0, 12) + '…') || '—'
                     const isChecked = scanSelected.has(s.id)
                     return (
-                      <div key={s.id} className="adm-table-row" style={{ display: 'grid', gridTemplateColumns: '36px 2fr 1.2fr 1.6fr 90px 80px 120px', padding: '11px 18px', alignItems: 'center', borderBottom: i < pagedScans.length - 1 ? '1px solid #f8fafc' : 'none', gap: 8, transition: 'background 0.12s', background: isChecked ? '#fef9f0' : undefined }}>
+                      <div key={s.id} className="adm-table-row" style={{ display: 'grid', gridTemplateColumns: '36px 2fr 1.2fr 1.3fr 80px 130px 110px', padding: '11px 18px', alignItems: 'center', borderBottom: i < pagedScans.length - 1 ? '1px solid #f8fafc' : 'none', gap: 8, transition: 'background 0.12s', background: isChecked ? '#fef9f0' : undefined }}>
                         <input
                           type="checkbox"
                           checked={isChecked}
