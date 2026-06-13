@@ -388,7 +388,7 @@ function ProductResultCard({ result, onScanAgain, onReVerify }: { result: ScanRe
   }
   const friendlyLabel = friendlyLabelMap[result.status] || 'Unknown'
 
-  const scMap: Record<string, { bg: string; border: string; badgeBg: string; badgeText: string; icon: string; label: string; headline: string; tagline: string }> = {
+  const scMap: Record<string, { bg: string; border: string; badgeBg: string; badgeText: string; icon: string; label: string; headline: string; tagline: string; tipsTitle?: string; tips?: string[] }> = {
     AUTHENTIC: {
       bg: '#f0fdf4', border: '#86efac', badgeBg: '#dcfce7', badgeText: '#15803d',
       icon: '✅', label: friendlyLabel, // "Authentic" or "Likely Authentic"
@@ -402,30 +402,65 @@ function ProductResultCard({ result, onScanAgain, onReVerify }: { result: ScanRe
       icon: '⚠️', label: friendlyLabel, // "Suspicious" or "Limited Information"
       headline: 'Unable to fully verify this product',
       tagline: 'Some data was found but there are gaps or inconsistencies. Inspect packaging carefully before purchase.',
+      tipsTitle: 'What you can do',
+      tips: [
+        'Inspect the packaging closely — check spelling, print quality, seals and holograms.',
+        'Compare it with a photo of the genuine product from the brand’s official website.',
+        'Buy only from authorised retailers; be cautious with deep discounts from unknown sellers.',
+        'If something feels off, don’t consume or use it — contact the brand to confirm.',
+      ],
     },
     FAKE: {
       bg: '#fff1f2', border: '#fda4af', badgeBg: '#ffe4e6', badgeText: '#9f1239',
       icon: '🚫', label: 'Counterfeit',
       headline: 'Counterfeit indicators detected',
       tagline: 'Our system identified specific red flags for this product. Do NOT purchase or consume this item.',
+      tipsTitle: 'What you should do',
+      tips: [
+        'Do NOT use, consume, or resell this product.',
+        'Keep the item and your receipt as evidence.',
+        'Report the seller to the brand and your local consumer-protection agency.',
+        'Request a refund or chargeback from the seller or payment provider.',
+      ],
     },
     UNVERIFIED: {
       bg: '#f8fafc', border: '#cbd5e1', badgeBg: '#f1f5f9', badgeText: '#475569',
       icon: 'ℹ️', label: 'Not Found',
       headline: 'Product not found in our system',
       tagline: 'This does NOT mean the product is fake — it just means no public record has been found yet. Private-label, regional, or brand-new products often show this status.',
+      tipsTitle: 'What you can do',
+      tips: [
+        'Double-check the barcode number you scanned matches the one on the package.',
+        'Many genuine items aren’t in public databases yet — store-brand, regional or brand-new products often show this.',
+        'Inspect the packaging for the usual signs of authenticity (seals, batch codes, quality of print).',
+        'Help others: tap “Report / Submit this product” so we can add it to the database.',
+      ],
     },
     RECALLED: {
       bg: '#fff7ed', border: '#fdba74', badgeBg: '#ffedd5', badgeText: '#c2410c',
       icon: '⚠️', label: 'Recalled',
       headline: 'This product is under an active recall',
       tagline: 'The product is real, but it has been recalled by the FDA or CPSC due to a safety issue. Stop using it immediately and check the official recall notice for return/refund instructions.',
+      tipsTitle: 'What you should do',
+      tips: [
+        'Stop using the product immediately.',
+        'Check the official recall notice (FDA / CPSC) for your batch or lot number.',
+        'Follow the recall instructions — most offer a free return, repair or refund.',
+        'Do not throw it away if disposal instructions are provided — follow them instead.',
+      ],
     },
     UNREADABLE: {
       bg: '#eff6ff', border: '#93c5fd', badgeBg: '#dbeafe', badgeText: '#1d4ed8',
       icon: '📷', label: 'Rescan Needed',
       headline: 'We couldn\u2019t read that barcode cleanly',
       tagline: 'The scanned code failed its built-in checksum — it was likely misread by the camera. Please rescan with brighter light and the barcode fully in frame. This is NOT a counterfeit verdict.',
+      tipsTitle: 'How to get a clean scan',
+      tips: [
+        'Rescan in good lighting — avoid glare and shadows on the barcode.',
+        'Hold steady and keep the whole barcode flat and fully inside the frame.',
+        'Clean the camera lens and the barcode surface if it’s smudged or wrinkled.',
+        'Still no luck? Type the digits in manually using the number entry option.',
+      ],
     },
   }
   const sc = scMap[verdict]
@@ -527,6 +562,20 @@ function ProductResultCard({ result, onScanAgain, onReVerify }: { result: ScanRe
           <div>
             <p style={{ fontSize: '0.95rem', fontWeight: 800, color: sc.badgeText, margin: 0, marginBottom: 4 }}>{sc.headline}</p>
             <p style={{ fontSize: '0.8rem', color: sc.badgeText, opacity: 0.85, margin: 0, lineHeight: 1.5 }}>{sc.tagline}</p>
+            {/* Actionable "What you can do" guidance \u2014 reduces user frustration on
+                NOT_FOUND / RESCAN / LIMITED-INFO verdicts by telling them next steps */}
+            {sc.tips && sc.tips.length > 0 && (
+              <div style={{ marginTop: 12, padding: '12px 14px', background: sc.badgeBg, border: `1px solid ${sc.border}`, borderRadius: 10 }}>
+                <p style={{ fontSize: '0.78rem', fontWeight: 800, color: sc.badgeText, margin: 0, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span aria-hidden>{'\uD83D\uDCA1'}</span>{sc.tipsTitle || 'What you can do'}
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {sc.tips.map((tip, i) => (
+                    <li key={i} style={{ fontSize: '0.78rem', color: sc.badgeText, opacity: 0.92, lineHeight: 1.45 }}>{tip}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 

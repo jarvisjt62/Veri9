@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { formatStatus } from '@/lib/utils/formatStatus'
+import { formatStatus, getStatusMeta } from '@/lib/utils/formatStatus'
 // Single source of truth for ALL verification databases (38 sources).
 // Auto-syncs admin UI with the engine — no more drift.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -3224,13 +3224,12 @@ function AdminPageInner() {
               } catch { toast.error('Network error') }
             }
 
+            // Use the central status metadata so colors + labels match the
+            // rest of the app (Authentic, Likely Authentic, Limited Information,
+            // Not Found, Suspicious, Counterfeit, Recalled, Rescan Needed).
             const statusColor = (st: string) => {
-              if (st === 'authentic' || st === 'VERIFIED') return { bg: '#d1fae5', color: '#065f46' }
-              if (st === 'COUNTERFEIT' || st === 'counterfeit') return { bg: '#fce7f3', color: '#9d174d' }
-              if (st === 'suspicious' || st === 'SUSPICIOUS') return { bg: '#fee2e2', color: '#991b1b' }
-              if (st === 'LIKELY_AUTHENTIC') return { bg: '#dbeafe', color: '#1e40af' }
-              if (st === 'NOT_FOUND') return { bg: '#fef3c7', color: '#92400e' }
-              return { bg: '#f1f5f9', color: '#64748b' }
+              const m = getStatusMeta(st)
+              return { bg: m.bg, color: m.color }
             }
 
             return (
@@ -3374,7 +3373,7 @@ function AdminPageInner() {
                         <div style={{ fontSize: '0.78rem', color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={userEmail}>{userEmail}</div>
                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{s.created_at ? new Date(s.created_at).toLocaleString() : '—'}</div>
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#635bff' }}>{s.trust_score}%</div>
-                        <span style={{ padding: '2px 7px', borderRadius: 7, fontSize: '0.68rem', fontWeight: 700, background: sc.bg, color: sc.color, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 78 }}>{s.status}</span>
+                        <span title={formatStatus(s.status)} style={{ padding: '2px 8px', borderRadius: 7, fontSize: '0.68rem', fontWeight: 700, background: sc.bg, color: sc.color, display: 'inline-block', whiteSpace: 'nowrap' }}>{formatStatus(s.status)}</span>
                         <div style={{ display: 'flex', gap: 4 }}>
                           <button onClick={() => setScanModal({ mode: 'view', scan: s })} style={{ padding: '4px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700, color: '#635bff', background: '#f0f0ff', border: '1px solid #e0e0ff', cursor: 'pointer' }}>View</button>
                           <button onClick={() => { setEditScanStatus(s.status); setScanModal({ mode: 'edit', scan: s }) }} style={{ padding: '4px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700, color: '#0ea5e9', background: '#f0f9ff', border: '1px solid #bae6fd', cursor: 'pointer' }}>Edit</button>
@@ -4839,15 +4838,17 @@ function AdminPageInner() {
                           <span style={{ width: 100, fontSize: '0.78rem', fontWeight: 700, color: '#64748b', flexShrink: 0 }}>Status</span>
                           {auditModal.mode === 'edit' ? (
                             <select value={editAuditStatus} onChange={e => setEditAuditStatus(e.target.value)} style={{ flex: 1, padding: '7px 10px', border: '1.5px solid #e2e8f0', borderRadius: 8, fontSize: '0.85rem', background: '#fff', color: '#0f172a' }}>
-                              <option value="VERIFIED">VERIFIED</option>
-                              <option value="LIKELY_AUTHENTIC">LIKELY_AUTHENTIC</option>
-                              <option value="INSUFFICIENT_DATA">INSUFFICIENT_DATA</option>
-                              <option value="SUSPICIOUS">SUSPICIOUS</option>
-                              <option value="COUNTERFEIT">COUNTERFEIT</option>
-                              <option value="NOT_FOUND">NOT_FOUND</option>
+                              <option value="VERIFIED">{formatStatus('VERIFIED')}</option>
+                              <option value="LIKELY_AUTHENTIC">{formatStatus('LIKELY_AUTHENTIC')}</option>
+                              <option value="INSUFFICIENT_DATA">{formatStatus('INSUFFICIENT_DATA')}</option>
+                              <option value="SUSPICIOUS">{formatStatus('SUSPICIOUS')}</option>
+                              <option value="COUNTERFEIT">{formatStatus('COUNTERFEIT')}</option>
+                              <option value="NOT_FOUND">{formatStatus('NOT_FOUND')}</option>
+                              <option value="RECALLED">{formatStatus('RECALLED')}</option>
+                              <option value="UNREADABLE">{formatStatus('UNREADABLE')}</option>
                             </select>
                           ) : (
-                            <span style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 700 }}>{auditModal.scan.status.toUpperCase()}</span>
+                            <span style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 700 }}>{formatStatus(auditModal.scan.status)}</span>
                           )}
                         </div>
                       </div>
