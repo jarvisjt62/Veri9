@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import toast from 'react-hot-toast'
 import ReCAPTCHA from 'react-google-recaptcha'
 
@@ -63,6 +63,21 @@ const GATEWAYS: Gateway[] = [
   { id: 'crypto',      name: 'Crypto (BTC/ETH/USDT)',  adminName: 'Coinbase Commerce', icon: '₿',    regions: ['Worldwide'],          currencies: ['*'], color: '#f7931a', desc: 'Bitcoin, Ethereum, USDT · Coinbase Commerce' },
 ]
 
+// ── Recurring monthly supporter tiers ──────────────────────────────
+const SUPPORTER_TIERS = [
+  { id: 'supporter', label: 'Supporter',   usd: 3,  icon: '💙', desc: 'Keep Veri9 free for everyone',     badge: '💙 Supporter',  color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe' },
+  { id: 'champion', label: 'Champion',     usd: 5,  icon: '🟣', desc: 'Faster scans + deeper analysis',   badge: '🟣 Champion',  color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd' },
+  { id: 'patron',    label: 'Patron',       usd: 10, icon: '🥇', desc: 'Power our mission + early access', badge: '🥇 Patron',   color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+] as const
+
+type SocialProof = {
+  totalSupporters: number
+  totalCompleted: number
+  totalUsd: string
+  recentDonors: { name: string; amount: number; currency: string; when: string }[]
+  recurringCount: number
+}
+
 export default function DonatePage() {
   const [currency, setCurrency] = useState<Currency>(CURRENCIES[0])
   const [amount, setAmount] = useState<number | ''>(CURRENCIES[0].presets[1])
@@ -75,6 +90,19 @@ export default function DonatePage() {
   const [anonymous, setAnonymous] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const recaptchaRef = useRef<ReCAPTCHA>(null)
+
+  // ── Recurring donation mode ──
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [selectedTier, setSelectedTier] = useState<string>('supporter')
+
+  // ── Social proof: live stats from server ──
+  const [socialProof, setSocialProof] = useState<SocialProof | null>(null)
+  useEffect(() => {
+    fetch('/api/donate/stats', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.success) setSocialProof(d) })
+      .catch(() => {})
+  }, [])
 
   // When currency changes, reset to its middle preset
   useEffect(() => {
@@ -146,6 +174,7 @@ export default function DonatePage() {
 
     // Record the donation intent in localStorage (client-side history)
     // AND persist to the server so admins can see it from their own dashboard.
+    const activeTier = isRecurring ? SUPPORTER_TIERS.find(t => t.id === selectedTier) : null
     const donationPayload = {
       amount: finalAmount,
       currency: currency.code,
@@ -156,6 +185,8 @@ export default function DonatePage() {
       name: anonymous ? 'Anonymous' : (name.trim() || ''),
       email: anonymous ? '' : (email.trim() || ''),
       message,
+      recurring: isRecurring,
+      tier: isRecurring ? selectedTier : '',
       status: 'pending_gateway_config',
     }
 
@@ -209,12 +240,14 @@ export default function DonatePage() {
     // For now we simulate since real gateway keys aren't configured yet
     await new Promise(r => setTimeout(r, 900))
     toast.success(
-      `Thank you! Your ${currency.symbol}${finalAmount} donation via ${selectedGateway?.name} was recorded. ` +
+      `Thank you! Your ${isRecurring ? 'monthly ' : ''}${currency.symbol}${finalAmount} ${isRecurring ? 'subscription' : 'donation'} via ${selectedGateway?.name} was recorded. ` +
+      (isRecurring ? `You'll get the ${activeTier?.badge || SUPPORTER_TIERS[0].badge} badge! ` : '') +
       `Once the admin connects ${selectedGateway?.name} API keys in the admin dashboard, donations will process instantly. 💙`,
       { duration: 6000 }
     )
     setCustomAmount(''); setName(''); setEmail(''); setMessage(''); setAmount(currency.presets[1]); setAnonymous(false)
     recaptchaRef.current?.reset(); setCaptchaToken(null)
+    setIsRecurring(false); setSelectedTier('supporter')
     setSubmitting(false)
   }
 
@@ -260,9 +293,82 @@ export default function DonatePage() {
         </div>
       </section>
 
+      {/* Social proof banner */}
+      {socialProof && socialProof.totalCompleted > 0 && (
+        <section style={{ maxWidth: 640, margin: '0 auto 24px', padding: '0 20px' }}>
+          <div style={{ background: 'linear-gradient(135deg,#f0f4ff,#ede9fe)', borderRadius: 14, padding: '18px 20px', border: '1px solid #c7d2fe', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '1.1rem' }}>🙌</span>
+              <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#4338ca' }}>
+                {socialProof.totalSupporters} supporter{socialProof.totalSupporters !== 1 ? 's' : ''} have donated ${Number(socialProof.totalUsd).toLocaleString()} USD
+              </span>
+              {socialProof.recurringCount > 0 && (
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#7c3aed', background: '#f5f3ff', padding: '3px 8px', borderRadius: 6, border: '1px solid #c4b5fd' }}>
+                  {socialProof.recurringCount} monthly
+                </span>
+              )}
+            </div>
+            {socialProof.recentDonors.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {socialProof.recentDonors.map((d, i) => (
+                  <span key={i} style={{ fontSize: '0.72rem', background: '#fff', padding: '4px 10px', borderRadius: 8, border: '1px solid #e5e7eb', color: '#475569', fontWeight: 600 }}>
+                    {d.name} <span style={{ color: '#635bff', fontWeight: 700 }}>{d.amount} {d.currency}</span> <span style={{ color: '#94a3b8', fontWeight: 500 }}>{d.when}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* Donation form */}
       <section style={{ maxWidth: 640, margin: '0 auto 60px', padding: '0 20px' }}>
         <form onSubmit={handleDonate} style={{ background: '#fff', borderRadius: 16, padding: '28px 26px', border: '1px solid #e5e7eb', boxShadow: '0 6px 24px rgba(0,0,0,0.06)' }}>
+
+          {/* One-time / Monthly toggle */}
+          <div style={{ marginBottom: 22, display: 'flex', background: '#f1f5f9', borderRadius: 10, padding: 4, gap: 4 }}>
+            <button type="button" onClick={() => setIsRecurring(false)} style={{
+              flex: 1, padding: '10px 0', borderRadius: 8, fontWeight: 700, fontSize: '0.88rem', border: 'none', cursor: 'pointer',
+              background: !isRecurring ? '#fff' : 'transparent', color: !isRecurring ? '#4338ca' : '#64748b',
+              boxShadow: !isRecurring ? '0 2px 8px rgba(99,91,255,0.15)' : 'none', transition: 'all 0.2s',
+            }}>One-time</button>
+            <button type="button" onClick={() => setIsRecurring(true)} style={{
+              flex: 1, padding: '10px 0', borderRadius: 8, fontWeight: 700, fontSize: '0.88rem', border: 'none', cursor: 'pointer',
+              background: isRecurring ? '#fff' : 'transparent', color: isRecurring ? '#4338ca' : '#64748b',
+              boxShadow: isRecurring ? '0 2px 8px rgba(99,91,255,0.15)' : 'none', transition: 'all 0.2s',
+            }}>Monthly 💜</button>
+          </div>
+
+          {/* Recurring tier selector */}
+          {isRecurring && (
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                {SUPPORTER_TIERS.map(tier => {
+                  const sel = selectedTier === tier.id
+                  const localAmt = Math.round(tier.usd * currency.rate)
+                  return (
+                    <button key={tier.id} type="button" onClick={() => { setSelectedTier(tier.id); setAmount(localAmt); setCustomAmount('') }} style={{
+                      padding: '14px 10px', borderRadius: 12, cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s',
+                      background: sel ? tier.bg : '#fff', border: sel ? `2px solid ${tier.color}` : '2px solid #e5e7eb',
+                      boxShadow: sel ? `0 4px 12px ${tier.color}33` : 'none',
+                    }}>
+                      <div style={{ fontSize: '1.5rem', marginBottom: 4 }}>{tier.icon}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: sel ? tier.color : '#0f172a', marginBottom: 2 }}>{tier.label}</div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 900, color: sel ? tier.color : '#0f172a', marginBottom: 4 }}>
+                        {currency.symbol}{localAmt.toLocaleString()}/mo
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#64748b', lineHeight: 1.3 }}>{tier.desc}</div>
+                      {sel && (
+                        <div style={{ marginTop: 8, fontSize: '0.7rem', fontWeight: 700, color: tier.color, background: `${tier.color}18`, padding: '3px 8px', borderRadius: 6, display: 'inline-block' }}>
+                          Badge: {tier.badge}
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Currency selector */}
           <div style={{ marginBottom: 20 }}>
@@ -285,25 +391,29 @@ export default function DonatePage() {
             </select>
           </div>
 
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>Choose an amount</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 12 }}>
-            {currency.presets.map(p => (
-              <button key={p} type="button"
-                onClick={() => { setAmount(p); setCustomAmount('') }}
-                style={{
-                  padding: '12px 4px', borderRadius: 10, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
-                  background: amount === p && !customAmount ? 'linear-gradient(135deg,#635bff,#4f46e5)' : '#f8fafc',
-                  color: amount === p && !customAmount ? '#fff' : '#374151',
-                  border: amount === p && !customAmount ? '2px solid #635bff' : '2px solid #e5e7eb',
-                  transition: 'all 0.15s',
-                }}>
-                {currency.symbol}{p.toLocaleString()}
-              </button>
-            ))}
-          </div>
+          {!isRecurring && (
+            <>
+              <h2 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>Choose an amount</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 12 }}>
+                {currency.presets.map(p => (
+                  <button key={p} type="button"
+                    onClick={() => { setAmount(p); setCustomAmount('') }}
+                    style={{
+                      padding: '12px 4px', borderRadius: 10, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                      background: amount === p && !customAmount ? 'linear-gradient(135deg,#635bff,#4f46e5)' : '#f8fafc',
+                      color: amount === p && !customAmount ? '#fff' : '#374151',
+                      border: amount === p && !customAmount ? '2px solid #635bff' : '2px solid #e5e7eb',
+                      transition: 'all 0.15s',
+                    }}>
+                    {currency.symbol}{p.toLocaleString()}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <label style={{ display: 'block', marginBottom: 18 }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>Or custom amount</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>{isRecurring ? 'Custom monthly amount' : 'Or custom amount'}</span>
             <div style={{ position: 'relative', marginTop: 6 }}>
               <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontWeight: 700 }}>{currency.symbol}</span>
               <input type="number" min="1" step="1" value={customAmount} onChange={e => setCustomAmount(e.target.value)} placeholder={String(currency.presets[2])} style={{ width: '100%', padding: '11px 14px 11px 34px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontSize: '0.95rem', outline: 'none' }} />
@@ -416,11 +526,11 @@ export default function DonatePage() {
             color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: submitting ? 'wait' : 'pointer',
             boxShadow: '0 6px 16px rgba(99,91,255,0.25)',
           }}>
-            {submitting ? 'Processing…' : `💙 Donate ${currency.symbol}${Number(displayAmount).toLocaleString()} ${currency.code}`}
+            {submitting ? 'Processing…' : isRecurring ? `💜 Subscribe ${currency.symbol}${Number(displayAmount).toLocaleString()} ${currency.code}/mo` : `💙 Donate ${currency.symbol}${Number(displayAmount).toLocaleString()} ${currency.code}`}
           </button>
 
           <p style={{ marginTop: 14, fontSize: '0.72rem', color: '#94a3b8', textAlign: 'center', lineHeight: 1.5 }}>
-            🔒 Secure payment · Processed by {GATEWAYS.find(g => g.id === gateway)?.name || 'Stripe'} · No recurring charges
+            🔒 Secure payment · Processed by {GATEWAYS.find(g => g.id === gateway)?.name || 'Stripe'} · {isRecurring ? 'Monthly subscription — cancel anytime' : 'No recurring charges'}
             <br />
             Veri9 is a volunteer-run project · <Link href="/about" style={{ color: '#635bff' }}>Learn more</Link>
           </p>

@@ -2486,6 +2486,31 @@ function DashboardPageInner() {
   const suspiciousCount = scanHistory.filter(s => s.status === 'suspicious' || s.status === 'SUSPICIOUS' || s.status === 'COUNTERFEIT' || s.status === 'counterfeit' || s.status === 'RECALLED' || s.status === 'recalled').length
   const avgScore = totalScans > 0 ? Math.round(scanHistory.reduce((sum, s) => sum + (s.trustScore || 0), 0) / totalScans) : 0
 
+  // ── Usage-based donation prompt: count scans this month ──
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  const monthScans = scanHistory.filter(s => s.timestamp >= monthStart).length
+  const showDonatePrompt = monthScans >= 5 && monthScans % 5 === 0  // prompt at 5, 10, 15… scans/month
+
+  // ── Donor badge: check localStorage for recurring donations ──
+  const [donorBadge, setDonorBadge] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('veri9_donations')
+      if (!raw) return
+      const donations = JSON.parse(raw)
+      const recurring = donations.filter((d: Record<string, unknown>) => d.recurring === true || d.recurring === 'true')
+      if (recurring.length > 0) {
+        // Find the highest tier
+        const tierMap: Record<string, string> = { patron: '🥇 Patron', champion: '🟣 Champion', supporter: '💙 Supporter' }
+        const tiers = recurring.map((d: Record<string, unknown>) => String(d.tier || 'supporter'))
+        if (tiers.includes('patron')) setDonorBadge(tierMap.patron)
+        else if (tiers.includes('champion')) setDonorBadge(tierMap.champion)
+        else setDonorBadge(tierMap.supporter)
+      }
+    } catch {}
+  }, [])
+
   const statusBadge = (status: string) => {
     // Distinguishes "Authentic" (VERIFIED, multi-confirmed) from "Likely Authentic"
     // (LIKELY_AUTHENTIC, single trusted source). All labels are human-friendly.
@@ -2819,6 +2844,35 @@ function DashboardPageInner() {
                 )}
               </div>
 
+              {/* ── Usage-based donation prompt ── */}
+              {showDonatePrompt && !donorBadge && (
+                <div style={{ background: 'linear-gradient(135deg, #eff6ff, #f5f3ff)', borderRadius: 14, padding: '18px 20px', border: '1px solid #c7d2fe', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: '1.6rem', flexShrink: 0 }}>💜</div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <p style={{ fontSize: '0.88rem', fontWeight: 800, color: '#4338ca', margin: 0, marginBottom: 4 }}>
+                      You've made {monthScans} scans this month!
+                    </p>
+                    <p style={{ fontSize: '0.78rem', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+                      Veri9 is free thanks to supporters like you. Help keep it that way with a $3/mo subscription.
+                    </p>
+                  </div>
+                  <button onClick={() => setTab('donate')} style={{ padding: '9px 18px', borderRadius: 10, background: 'linear-gradient(135deg, #635bff, #4f46e5)', color: '#fff', fontWeight: 700, fontSize: '0.82rem', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '0 4px 12px rgba(99,91,255,0.25)' }}>
+                    Become a Supporter →
+                  </button>
+                </div>
+              )}
+
+              {/* ── Donor badge ── */}
+              {donorBadge && (
+                <div style={{ background: 'linear-gradient(135deg, #f5f3ff, #eff6ff)', borderRadius: 14, padding: '14px 18px', border: '1px solid #c4b5fd', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: '1.3rem' }}>🏆</span>
+                  <div>
+                    <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#7c3aed', margin: 0 }}>{donorBadge}</p>
+                    <p style={{ fontSize: '0.7rem', color: '#64748b', margin: 0 }}>Thank you for supporting Veri9!</p>
+                  </div>
+                </div>
+              )}
+
 
             </div>
           )}
@@ -3094,6 +3148,9 @@ function DashboardPageInner() {
                   <div style={{ fontSize: '1.05rem', fontWeight: 800, color: forcedColor, marginBottom: 2 }}>{profileFullName || 'No name set'}</div>
                   <div style={{ fontSize: '0.875rem', color: isDark ? '#94a3b8' : '#64748b', marginBottom: 10 }}>{user.email}</div>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 9999, background: isDark ? 'rgba(16,185,129,0.15)' : '#f0fdf4', border: '1px solid #bbf7d0', fontSize: '0.72rem', fontWeight: 700, color: '#10b981' }}>✓ Verified Account</div>
+                  {donorBadge && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 9999, background: isDark ? 'rgba(124,58,237,0.15)' : '#f5f3ff', border: '1px solid #c4b5fd', fontSize: '0.72rem', fontWeight: 700, color: '#7c3aed', marginLeft: 8 }}>🏆 {donorBadge}</div>
+                  )}
                 </div>
                 <div style={{ borderTop: `1px solid ${isDark ? '#334155' : '#f1f5f9'}`, padding: '8px 22px' }}>
                   {profileEditing ? (
@@ -3138,10 +3195,11 @@ function DashboardPageInner() {
                         { label: 'Account ID', value: (user.id?.slice(0, 8) || '—').toUpperCase() + '…' },
                         { label: 'Member Since', value: user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—' },
                         { label: 'Total Scans', value: `${totalScans} scan${totalScans !== 1 ? 's' : ''}` },
+                        ...(donorBadge ? [{ label: 'Supporter Tier', value: donorBadge }] : []),
                       ].map((row, i, arr) => (
                         <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '12px 0', borderBottom: i < arr.length-1 ? `1px solid ${isDark ? '#334155' : '#f8fafc'}` : 'none', flexWrap: 'wrap', gap: 8 }}>
                           <span style={{ fontSize: '0.85rem', color: isDark ? '#94a3b8' : '#64748b' }}>{row.label}</span>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: forcedColor, maxWidth: 360, textAlign: 'right', wordBreak: 'break-word' }}>{row.value}</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: row.label === 'Supporter Tier' ? '#7c3aed' : forcedColor, maxWidth: 360, textAlign: 'right', wordBreak: 'break-word' }}>{row.value}</span>
                         </div>
                       ))}
                     </>
