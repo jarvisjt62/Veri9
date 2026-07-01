@@ -78,7 +78,6 @@ export async function POST(request: Request) {
     const {
       amount, currency, usdEquivalent, gateway, gatewayName,
       anonymous, name, email, message, status, paymentId,
-      recurring, tier,
     } = body || {}
 
     if (!amount || !currency || !gateway) {
@@ -97,8 +96,6 @@ export async function POST(request: Request) {
       message: String(message || ''),
       status: String(status || 'pending_gateway_config'),
       paymentId: String(paymentId || ''),
-      recurring: Boolean(recurring),
-      tier: String(tier || ''),
     })
 
     return NextResponse.json({ success: true, id })
@@ -131,7 +128,6 @@ export async function PATCH(request: Request) {
       const allowed = [
         'amount', 'currency', 'usdEquivalent', 'gateway', 'gatewayName',
         'anonymous', 'name', 'email', 'message', 'status', 'paymentId',
-        'recurring', 'tier',
       ]
       for (const k of allowed) {
         if (k in fields) clean[k] = (fields as Record<string, unknown>)[k]

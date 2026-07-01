@@ -301,8 +301,6 @@ export interface DonationRecord {
   message: string
   status: string           // pending_gateway_config | completed | failed
   paymentId: string        // gateway's payment/order id (if captured)
-  recurring: boolean       // true for monthly supporter subscriptions
-  tier: string             // 'supporter' | 'champion' | 'patron' | '' (one-time)
   createdAt: string
 }
 
@@ -324,8 +322,6 @@ export async function storeDonation(donation: Omit<DonationRecord, 'id' | 'creat
       message: donation.message || '',
       status: donation.status || 'pending_gateway_config',
       paymentId: donation.paymentId || '',
-      recurring: String(donation.recurring || false),
-      tier: donation.tier || '',
       createdAt,
     } as Record<string, string>,
   })
@@ -353,8 +349,6 @@ export async function getAllDonations(): Promise<DonationRecord[]> {
         message: c.message || '',
         status: c.status || 'pending_gateway_config',
         paymentId: c.paymentId || '',
-        recurring: c.recurring === 'true',
-        tier: c.tier || '',
         createdAt: c.createdAt || row.updated_at || '',
       }
     })

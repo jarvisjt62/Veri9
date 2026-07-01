@@ -1818,8 +1818,6 @@ function AdminPageInner() {
     name: string
     email: string
     message?: string
-    recurring?: boolean
-    tier?: string
     status: string
     createdAt: string
   }
@@ -1834,7 +1832,7 @@ function AdminPageInner() {
           const serverList: DonationIntent[] = (d.donations || []).map((x: {
             id: string; amount: number; currency: string; usdEquivalent: string;
             gateway: string; gatewayName?: string; name: string; email: string;
-            message?: string; recurring?: boolean; tier?: string; status: string; createdAt: string;
+            message?: string; status: string; createdAt: string;
           }) => ({
             id: x.id,
             amount: x.amount,
@@ -1845,8 +1843,6 @@ function AdminPageInner() {
             name: x.name,
             email: x.email,
             message: x.message,
-            recurring: x.recurring,
-            tier: x.tier,
             status: x.status,
             createdAt: x.createdAt,
           }))
@@ -1886,12 +1882,11 @@ function AdminPageInner() {
         const serverList: DonationIntent[] = (d.donations || []).map((x: {
           id: string; amount: number; currency: string; usdEquivalent: string;
           gateway: string; gatewayName?: string; name: string; email: string;
-          message?: string; recurring?: boolean; tier?: string; status: string; createdAt: string;
+          message?: string; status: string; createdAt: string;
         }) => ({
           id: x.id, amount: x.amount, currency: x.currency, usdEquivalent: x.usdEquivalent,
           gateway: x.gateway, gatewayName: x.gatewayName, name: x.name, email: x.email,
-          message: x.message, recurring: x.recurring, tier: x.tier,
-          status: x.status, createdAt: x.createdAt,
+          message: x.message, status: x.status, createdAt: x.createdAt,
         }))
         serverList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         setDonationIntents(serverList)
@@ -5234,7 +5229,6 @@ function AdminPageInner() {
                   .filter(d => new Date(d.createdAt).getMonth() === new Date().getMonth() && new Date(d.createdAt).getFullYear() === new Date().getFullYear())
                   .reduce((s, d) => s + parseFloat(d.usdEquivalent || '0'), 0)
                 const uniqueDonors = new Set(donationIntents.map(d => d.email)).size
-                const recurringDonors = donationIntents.filter(d => d.recurring).length
                 // Group by currency
                 const byCurrency: Record<string, number> = {}
                 donationIntents.forEach(d => { byCurrency[d.currency] = (byCurrency[d.currency] || 0) + d.amount })
@@ -5252,7 +5246,6 @@ function AdminPageInner() {
                         { label: 'Total Recorded (USD eq.)', value: `$${totalUsd.toFixed(2)}`, sub: `${donationIntents.length} donation${donationIntents.length !== 1 ? 's' : ''} all-time`, color: '#2563eb' },
                         { label: 'This Month',      value: `$${thisMonthUsd.toFixed(2)}`, sub: 'USD equivalent · ' + new Date().toLocaleString('en-US', { month: 'long' }), color: '#7c3aed' },
                         { label: 'Unique Donors',   value: String(uniqueDonors), sub: 'Distinct emails',            color: '#f59e0b' },
-                        { label: 'Monthly Supporters', value: String(recurringDonors), sub: 'Recurring subscriptions',   color: '#7c3aed' },
                       ].map(s => (
                         <div key={s.label} style={{ background: adminCardBg, padding: 20, borderRadius: 12, border: `1px solid ${adminBorder}` }}>
                           <div style={{ fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase', marginBottom: 6 }}>{s.label}</div>
@@ -5373,7 +5366,6 @@ function AdminPageInner() {
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Donor</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Amount</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Gateway</th>
-                          <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Type</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Status</th>
                           <th style={{ textAlign: 'left', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>When</th>
                           <th style={{ textAlign: 'right', padding: '10px 8px', fontSize: '0.7rem', fontWeight: 700, color: adminTextMuted, textTransform: 'uppercase' }}>Actions</th>
@@ -5397,15 +5389,6 @@ function AdminPageInner() {
                               <div style={{ fontSize: '0.72rem', color: adminTextMuted, fontWeight: 500 }}>≈ ${d.usdEquivalent}</div>
                             </td>
                             <td style={{ padding: '10px 8px', color: adminText }}>{d.gatewayName || d.gateway}</td>
-                            <td style={{ padding: '10px 8px' }}>
-                              {d.recurring ? (
-                                <span style={{ padding: '2px 7px', borderRadius: 6, fontSize: '0.68rem', fontWeight: 700, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #c4b5fd', whiteSpace: 'nowrap' }}>
-                                  💜 {d.tier ? d.tier.charAt(0).toUpperCase() + d.tier.slice(1) : 'Monthly'}
-                                </span>
-                              ) : (
-                                <span style={{ fontSize: '0.75rem', color: adminTextMuted }}>One-time</span>
-                              )}
-                            </td>
                             <td style={{ padding: '10px 8px' }}>
                               <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: '0.7rem', fontWeight: 700, background: meta.bg, color: meta.color, whiteSpace: 'nowrap' }}>
                                 {meta.icon} {meta.label}
@@ -5452,7 +5435,6 @@ function AdminPageInner() {
                         ['Email', viewDonation.email || '—'],
                         ['Amount', `${viewDonation.currency} ${viewDonation.amount.toLocaleString()} (≈ $${viewDonation.usdEquivalent} USD)`],
                         ['Gateway', viewDonation.gatewayName || viewDonation.gateway],
-                        ['Type', viewDonation.recurring ? <span style={{ padding: '2px 7px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #c4b5fd' }}>💜 {viewDonation.tier ? viewDonation.tier.charAt(0).toUpperCase() + viewDonation.tier.slice(1) : 'Monthly'}</span> : 'One-time'],
                         ['Status', <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: '0.78rem', fontWeight: 700, background: meta.bg, color: meta.color }}>{meta.icon} {meta.label}</span>],
                         ['Message', viewDonation.message || '—'],
                         ['Date', new Date(viewDonation.createdAt).toLocaleString()],
