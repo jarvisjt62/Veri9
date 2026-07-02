@@ -50,7 +50,10 @@ export async function POST(request: NextRequest) {
     const cfg = await loadEngineConfig()
     const result = await verifyProduct(cleanBarcode, cfg)
 
-    return NextResponse.json({ success: true, data: result })
+    // Strip internal debug fields that should never reach the client
+    const { _debugFoundSources, ...cleanResult } = result as any;
+
+    return NextResponse.json({ success: true, data: cleanResult })
   } catch (error) {
     console.error('[VERIFY] Error:', error)
     return NextResponse.json(
@@ -77,7 +80,8 @@ export async function GET(request: NextRequest) {
     const { verifyProduct } = await getEngine()
     const cfg = await loadEngineConfig()
     const result = await verifyProduct(cleanBarcode, cfg)
-    return NextResponse.json({ success: true, data: result })
+    const { _debugFoundSources, ...cleanResult } = result as any;
+    return NextResponse.json({ success: true, data: cleanResult })
   } catch (error) {
     return NextResponse.json({ success: false, error: (error as Error).message }, { status: 500 })
   }
